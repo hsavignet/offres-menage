@@ -210,7 +210,19 @@ def pricing():
 @app.route("/create-checkout-session", methods=["POST"])
 def checkout():
     try:
-        email = request.form["email"]
+        raw_email = request.form["email"]
+
+        # 🔒 Nettoyage STRICT pour Stripe (évite Unicode bug)
+        email = (
+            raw_email
+            .strip()
+            .lower()
+            .encode("ascii", "ignore")
+            .decode("ascii")
+        )
+
+        if "@" not in email:
+            return "<h1>Email invalide</h1>", 400
 
         session = stripe.checkout.Session.create(
             mode="subscription",
@@ -221,6 +233,9 @@ def checkout():
         )
 
         return redirect(session.url, code=303)
+
+    except Exception as e:
+        return f"<h1>Stripe error</h1><pre>{str(e)}</pre>", 500
 
     except Exception as e:
         return f"<h1>Stripe error</h1><pre>{str(e)}</pre>", 500
