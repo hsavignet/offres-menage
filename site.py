@@ -209,15 +209,22 @@ def pricing():
 
 @app.route("/create-checkout-session", methods=["POST"])
 def checkout():
-    email = request.form["email"]
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
-        customer_email=email,
-        success_url=request.host_url + "success",
-        cancel_url=request.host_url + "pricing",
-    )
-    return redirect(session.url)
+    try:
+        email = request.form["email"]
+
+        session = stripe.checkout.Session.create(
+            mode="subscription",
+            line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+            customer_email=email,
+            success_url=request.host_url + "success",
+            cancel_url=request.host_url + "pricing",
+        )
+
+        return redirect(session.url, code=303)
+
+    except Exception as e:
+        return f"<h1>Stripe error</h1><pre>{str(e)}</pre>", 500
+
 
 @app.route("/success")
 def success():
