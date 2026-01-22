@@ -1,0 +1,4 @@
+flask
+stripe
+requests
+beautifulsoup4
