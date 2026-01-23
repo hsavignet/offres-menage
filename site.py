@@ -120,17 +120,60 @@ body{margin:0;font-family:Arial;background:#f3f4f6;color:#111827}
 </style>
 """
 
-HOME = """
+HOME = HOME = """
 <!doctype html>
-<html><head><title>Contrats entretien ménager</title>""" + BASE_STYLE + """</head>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Veille contrats entretien ménager</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+""" + BASE_STYLE + """
+<style>
+.hero{
+  background:
+    linear-gradient(rgba(17,24,39,.75),rgba(17,24,39,.75)),
+    url("https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1600&q=80");
+  background-size:cover;
+  background-position:center;
+  color:white;
+}
+.hero .container{padding:140px 24px}
+.hero p{color:#e5e7eb;font-size:20px}
+.actions{margin-top:40px;display:flex;gap:16px;flex-wrap:wrap}
+</style>
+</head>
 <body>
+
+<header class="hero">
+  <div class="container">
+    <h1>Contrats d’entretien ménager</h1>
+    <p>
+      Tous les appels d’offres publics réunis<br>
+      pour les entreprises de nettoyage.
+    </p>
+
+    <div class="actions">
+      <a class="btn btn-dark" href="/pricing">S’abonner</a>
+      <a class="btn btn-light" href="/app?email=hsavignet@gmail.com">
+        Déjà abonné
+      </a>
+    </div>
+  </div>
+</header>
+
 <div class="container">
-<h1>Contrats d’entretien ménager</h1>
-<p>Accédez aux appels d’offres pour entreprises de nettoyage.</p><br>
-<a class="btn btn-dark" href="/pricing">S’abonner</a>
+  <h2>Pourquoi utiliser la plateforme ?</h2>
+  <div class="grid grid-3">
+    <div class="card">📄 Appels d’offres centralisés</div>
+    <div class="card">⏱️ Gain de temps énorme</div>
+    <div class="card">📈 Plus d’opportunités</div>
+  </div>
 </div>
-</body></html>
+
+</body>
+</html>
 """
+
 
 PRICING = """
 <!doctype html>
