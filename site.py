@@ -79,14 +79,12 @@ def search_offres(q, days):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
 
-    date_limit = (datetime.utcnow() - timedelta(days=days)).isoformat()
-
     sql = """
         SELECT titre, lien, date_pub
         FROM offres
-        WHERE date_pub >= ?
+        WHERE 1=1
     """
-    params = [date_limit]
+    params = []
 
     if q:
         sql += " AND lower(titre) LIKE ?"
@@ -98,6 +96,7 @@ def search_offres(q, days):
     rows = c.fetchall()
     conn.close()
     return rows
+
 
 # =====================================================
 # TEMPLATES
