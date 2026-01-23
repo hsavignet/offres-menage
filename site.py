@@ -60,12 +60,20 @@ def set_subscriber(email, status):
 def is_active(email):
     if not email:
         return False
+
+    # 🔑 ACCÈS ADMIN (TON EMAIL)
+    if email.lower() in [
+        "hsavignet@gmail.com",   # <-- mets TON email ici
+    ]:
+        return True
+
     conn = sqlite3.connect(DB)
     c = conn.cursor()
     c.execute("SELECT status FROM subscribers WHERE email=?", (email.lower(),))
     row = c.fetchone()
     conn.close()
     return row and row[0] == "active"
+
 
 def search_offres(q, days):
     conn = sqlite3.connect(DB)
