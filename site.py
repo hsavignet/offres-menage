@@ -309,6 +309,24 @@ def webhook():
         email = event["data"]["object"]["customer_email"]
         set_subscriber(email, "active")
     return "ok", 200
+@app.route("/debug/db")
+def debug_db():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+
+    c.execute("SELECT COUNT(*) FROM offres")
+    count = c.fetchone()[0]
+
+    c.execute("SELECT titre, lien, date_pub FROM offres LIMIT 5")
+    rows = c.fetchall()
+
+    conn.close()
+
+    return {
+        "count": count,
+        "sample": rows
+    }
+
 
 
 # =====================================================
