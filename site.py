@@ -5,15 +5,13 @@ from flask import Flask, request, redirect, render_template_string, abort
 import stripe
 from robot import main as run_robot
 
-
 # =====================================================
 # CONFIG
 # =====================================================
 app = Flask(__name__)
-import os
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE_DIR, "offres.db")
-
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID")
@@ -49,6 +47,7 @@ def init_db():
     conn.commit()
     conn.close()
 
+
 def set_subscriber(email, status):
     conn = sqlite3.connect(DB)
     c = conn.cursor()
@@ -62,14 +61,12 @@ def set_subscriber(email, status):
     conn.commit()
     conn.close()
 
+
 def is_active(email):
     if not email:
         return False
 
-    # 🔑 ACCÈS ADMIN (TON EMAIL)
-    if email.lower() in [
-        "hsavignet@gmail.com",   # <-- mets TON email ici
-    ]:
+    if email.lower() == "hsavignet@gmail.com":
         return True
 
     conn = sqlite3.connect(DB)
@@ -102,6 +99,31 @@ def search_offres(q, days):
     conn.close()
     return rows
 
+
+# =====================================================
+# AUTO INIT + ROBOT (CRITIQUE POUR RENDER)
+# =====================================================
+def auto_init_and_robot():
+    try:
+        init_db()
+
+        conn = sqlite3.connect(DB)
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM offres")
+        count = c.fetchone()[0]
+        conn.close()
+
+        if count == 0:
+            print("📦 DB vide → lancement du robot SEAO")
+            run_robot()
+        else:
+            print(f"✅ DB déjà remplie ({count} offres)")
+    except Exception as e:
+        print("❌ Erreur robot :", e)
+
+
+# ⚠️ APPEL OBLIGATOIRE AU CHARGEMENT DU FICHIER
+auto_init_and_robot()
 
 # =====================================================
 # TEMPLATES
@@ -174,15 +196,6 @@ LANDING = """
   </div>
 </header>
 
-<div class="container">
-  <h2>Aperçu de la plateforme</h2>
-  <div class="grid grid-3">
-    <div class="card">Appels d’offres centralisés</div>
-    <div class="card">Recherche simple par mots-clés</div>
-    <div class="card">Mises à jour continues</div>
-  </div>
-</div>
-
 </body>
 </html>
 """
@@ -190,10 +203,7 @@ LANDING = """
 PRICING = """
 <!doctype html>
 <html>
-<head>
-<title>Abonnement</title>
-""" + BASE_STYLE + """
-</head>
+<head><title>Abonnement</title>""" + BASE_STYLE + """</head>
 <body>
 <div class="container">
   <div class="card" style="max-width:480px;margin:auto">
@@ -236,20 +246,6 @@ APP = """
 <body>
 <div class="container">
 <h2>Contrats disponibles</h2>
-
-<form method="get">
-<div class="grid" style="grid-template-columns:2fr 1fr auto">
-  <input name="q" value="{{q}}" placeholder="Recherche">
-  <select name="days">
-    {% for d in [7,30,90,180] %}
-      <option value="{{d}}" {% if d==days %}selected{% endif %}>{{d}} jours</option>
-    {% endfor %}
-  </select>
-  <button class="btn btn-dark">Filtrer</button>
-</div>
-</form>
-
-<br>
 
 {% for t,l,d in offres %}
 <div class="card" style="margin-bottom:16px">
@@ -299,11 +295,8 @@ def app_page():
     if not is_active(email):
         return redirect("/login")
 
-    q = request.args.get("q","")
-    days = int(request.args.get("days",30))
-    offres = search_offres(q, days)
-
-    return render_template_string(APP, offres=offres, q=q, days=days)
+    offres = search_offres("", 30)
+    return render_template_string(APP, offres=offres)
 
 @app.route("/webhook", methods=["POST"])
 def webhook():
@@ -317,25 +310,7 @@ def webhook():
         set_subscriber(email, "active")
     return "ok", 200
 
+
 # =====================================================
 if __name__ == "__main__":
-    init_db()
-
-    # 🔥 LANCEMENT DU ROBOT SI LA DB EST VIDE
-    try:
-        conn = sqlite3.connect(DB)
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM offres")
-        count = c.fetchone()[0]
-        conn.close()
-
-        if count == 0:
-            print("📦 DB vide → lancement du robot")
-            run_robot()
-        else:
-            print(f"✅ DB déjà remplie ({count} offres)")
-    except Exception as e:
-        print("❌ Erreur robot :", e)
-
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
-
