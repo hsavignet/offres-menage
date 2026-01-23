@@ -8,7 +8,10 @@ import stripe
 # CONFIG
 # =====================================================
 app = Flask(__name__)
-DB = "offres.db"
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB = os.path.join(BASE_DIR, "offres.db")
+
 
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID")

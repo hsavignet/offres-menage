@@ -13,7 +13,10 @@ KEYWORDS = [
     "janitorial", "lavage", "désinfection", "desinfection", "sanitize", "sanitation"
 ]
 
-DB = "offres.db"
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DB = os.path.join(BASE_DIR, "offres.db")
+
 
 
 # =====================================================
