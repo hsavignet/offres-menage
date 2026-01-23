@@ -119,10 +119,63 @@ APP = """
 </body>
 </html>
 """
+HOME = """
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <title>Offres d’entretien ménager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body{
+      margin:0;
+      font-family:Arial, sans-serif;
+      background:#f3f4f6;
+      color:#111827;
+    }
+    header{
+      background:#111827;
+      color:white;
+      padding:100px 24px;
+      text-align:center;
+    }
+    h1{font-size:42px;margin-bottom:16px}
+    p{font-size:20px;color:#d1d5db}
+    .btn{
+      display:inline-block;
+      margin-top:40px;
+      padding:16px 32px;
+      background:white;
+      color:#111827;
+      border-radius:10px;
+      font-size:18px;
+      font-weight:700;
+      text-decoration:none;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Contrats d’entretien ménager</h1>
+  <p>Accédez aux appels d’offres pour entreprises de nettoyage</p>
+  <a class="btn" href="/app?email=hsavignet@gmail.com">
+    Voir les contrats
+  </a>
+</header>
+
+</body>
+</html>
+"""
+
 
 # =====================================================
 # ROUTES
 # =====================================================
+@app.route("/")
+def home():
+    return render_template_string(HOME)
+
 @app.route("/app")
 def app_page():
     email = request.args.get("email","")
