@@ -99,31 +99,34 @@ def search_offres(q, days):
     conn.close()
     return rows
 
+def seed_test_data():
+    conn = sqlite3.connect(DB)
+    c = conn.cursor()
+
+    c.execute("SELECT COUNT(*) FROM offres")
+    count = c.fetchone()[0]
+
+    if count == 0:
+        now = datetime.utcnow().isoformat()
+        c.executemany(
+            "INSERT INTO offres (titre, lien, date_pub) VALUES (?, ?, ?)",
+            [
+                ("Contrat entretien école primaire", "https://example.com/contrat1", now),
+                ("Nettoyage immeuble municipal", "https://example.com/contrat2", now),
+                ("Entretien centre sportif", "https://example.com/contrat3", now),
+            ]
+        )
+        print("🧪 Données de test insérées")
+
+    conn.commit()
+    conn.close()
+
 
 # =====================================================
 # AUTO INIT + ROBOT (CRITIQUE POUR RENDER)
 # =====================================================
-def auto_init_and_robot():
-    try:
-        init_db()
-
-        conn = sqlite3.connect(DB)
-        c = conn.cursor()
-        c.execute("SELECT COUNT(*) FROM offres")
-        count = c.fetchone()[0]
-        conn.close()
-
-        if count == 0:
-            print("📦 DB vide → lancement du robot SEAO")
-            run_robot()
-        else:
-            print(f"✅ DB déjà remplie ({count} offres)")
-    except Exception as e:
-        print("❌ Erreur robot :", e)
-
 
 # ⚠️ APPEL OBLIGATOIRE AU CHARGEMENT DU FICHIER
-auto_init_and_robot()
 
 # =====================================================
 # TEMPLATES
@@ -331,4 +334,6 @@ def debug_db():
 
 # =====================================================
 if __name__ == "__main__":
+    init_db()
+    seed_test_data()   # 👈 GARANTI qu’il y a des offres
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
