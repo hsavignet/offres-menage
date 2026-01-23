@@ -3,6 +3,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from flask import Flask, request, redirect, render_template_string, abort
 import stripe
+from robot import main as run_robot
+
 
 # =====================================================
 # CONFIG
@@ -318,4 +320,22 @@ def webhook():
 # =====================================================
 if __name__ == "__main__":
     init_db()
+
+    # 🔥 LANCEMENT DU ROBOT SI LA DB EST VIDE
+    try:
+        conn = sqlite3.connect(DB)
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*) FROM offres")
+        count = c.fetchone()[0]
+        conn.close()
+
+        if count == 0:
+            print("📦 DB vide → lancement du robot")
+            run_robot()
+        else:
+            print(f"✅ DB déjà remplie ({count} offres)")
+    except Exception as e:
+        print("❌ Erreur robot :", e)
+
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+
