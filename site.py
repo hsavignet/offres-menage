@@ -1,7 +1,7 @@
 import os
 import sqlite3
 from datetime import datetime
-from flask import Flask, request, redirect, render_template_string
+from flask import Flask, request, redirect, render_template_string, abort
 import stripe
 
 # =====================================================
@@ -62,21 +62,40 @@ def seed_if_empty():
                 ("Entretien centre sportif", "https://example.com/contrat3", now),
             ]
         )
-        print("✅ Offres de test insérées")
 
     conn.commit()
     conn.close()
 
-# 👉 CES LIGNES S’EXÉCUTENT SUR RENDER
+def set_subscriber(email, status):
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO subscribers (email, status, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(email) DO UPDATE SET
+        status=excluded.status,
+        updated_at=excluded.updated_at
+    """, (email.lower(), status, datetime.utcnow().isoformat()))
+    conn.commit()
+    conn.close()
+
+def is_active(email):
+    if email.lower() == "hsavignet@gmail.com":
+        return True
+
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT status FROM subscribers WHERE email=?", (email.lower(),))
+    row = c.fetchone()
+    conn.close()
+    return row and row[0] == "active"
+
 init_db()
 seed_if_empty()
 
 # =====================================================
 # LOGIQUE
 # =====================================================
-def is_active(email):
-    return email.lower() == "hsavignet@gmail.com"
-
 def get_offres():
     conn = get_db()
     c = conn.cursor()
@@ -90,84 +109,62 @@ def get_offres():
 # =====================================================
 BASE_STYLE = """
 <style>
-body{font-family:Arial;background:#f3f4f6;margin:0}
-.container{max-width:900px;margin:auto;padding:60px}
-.card{background:white;padding:24px;border-radius:12px;margin-bottom:16px}
-.btn{padding:10px 16px;background:#111827;color:white;border-radius:6px;text-decoration:none}
+body{margin:0;font-family:Arial;background:#f3f4f6;color:#111827}
+.container{max-width:1200px;margin:auto;padding:80px 24px}
+.btn{padding:14px 28px;border-radius:10px;font-weight:700;display:inline-block}
+.btn-dark{background:#111827;color:white}
+.btn-light{background:white;color:#111827;border:1px solid #e5e7eb}
+.card{background:white;border-radius:16px;padding:32px;box-shadow:0 20px 40px rgba(0,0,0,.08)}
+.grid{display:grid;gap:24px}
+.grid-3{grid-template-columns:repeat(auto-fit,minmax(260px,1fr))}
 </style>
+"""
+
+HOME = """
+<!doctype html>
+<html><head><title>Contrats entretien ménager</title>""" + BASE_STYLE + """</head>
+<body>
+<div class="container">
+<h1>Contrats d’entretien ménager</h1>
+<p>Accédez aux appels d’offres pour entreprises de nettoyage.</p><br>
+<a class="btn btn-dark" href="/pricing">S’abonner</a>
+</div>
+</body></html>
+"""
+
+PRICING = """
+<!doctype html>
+<html><head><title>Abonnement</title>""" + BASE_STYLE + """</head>
+<body>
+<div class="container">
+<div class="card" style="max-width:420px;margin:auto">
+<h2>Abonnement Premium</h2>
+<p>29 $ / mois</p>
+<form method="post" action="/create-checkout-session">
+<input name="email" placeholder="Email professionnel" required><br><br>
+<button class="btn btn-dark" style="width:100%">Continuer vers le paiement</button>
+</form>
+</div>
+</div>
+</body></html>
 """
 
 APP = """
 <!doctype html>
-<html>
-<head><title>Contrats</title>""" + BASE_STYLE + """</head>
+<html><head><title>Contrats</title>""" + BASE_STYLE + """</head>
 <body>
 <div class="container">
 <h2>Contrats disponibles</h2>
-
 {% for t,l,d in offres %}
-<div class="card">
-  <strong>{{t}}</strong><br>
-  <small>{{d}}</small><br><br>
-  <a class="btn" href="{{l}}" target="_blank">Voir</a>
+<div class="card" style="margin-bottom:20px">
+<strong>{{t}}</strong><br>
+<small>{{d}}</small><br><br>
+<a class="btn btn-light" href="{{l}}" target="_blank">Voir</a>
 </div>
-{% else %}
-<p>Aucun résultat</p>
 {% endfor %}
-
 </div>
-</body>
-</html>
+</body></html>
 """
-HOME = """
-<!doctype html>
-<html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <title>Offres d’entretien ménager</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <style>
-    body{
-      margin:0;
-      font-family:Arial, sans-serif;
-      background:#f3f4f6;
-      color:#111827;
-    }
-    header{
-      background:#111827;
-      color:white;
-      padding:100px 24px;
-      text-align:center;
-    }
-    h1{font-size:42px;margin-bottom:16px}
-    p{font-size:20px;color:#d1d5db}
-    .btn{
-      display:inline-block;
-      margin-top:40px;
-      padding:16px 32px;
-      background:white;
-      color:#111827;
-      border-radius:10px;
-      font-size:18px;
-      font-weight:700;
-      text-decoration:none;
-    }
-  </style>
-</head>
-<body>
-
-<header>
-  <h1>Contrats d’entretien ménager</h1>
-  <p>Accédez aux appels d’offres pour entreprises de nettoyage</p>
-  <a class="btn" href="/app?email=hsavignet@gmail.com">
-    Voir les contrats
-  </a>
-</header>
-
-</body>
-</html>
-"""
-
 
 # =====================================================
 # ROUTES
@@ -176,13 +173,40 @@ HOME = """
 def home():
     return render_template_string(HOME)
 
+@app.route("/pricing")
+def pricing():
+    return render_template_string(PRICING)
+
+@app.route("/create-checkout-session", methods=["POST"])
+def checkout():
+    email = request.form["email"].lower()
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        line_items=[{"price": STRIPE_PRICE_ID, "quantity": 1}],
+        customer_email=email,
+        success_url=request.host_url + "app?email=" + email,
+        cancel_url=request.host_url + "pricing",
+    )
+    return redirect(session.url, code=303)
+
 @app.route("/app")
 def app_page():
-    email = request.args.get("email","")
+    email = request.args.get("email","").lower()
     if not is_active(email):
-        return "Accès refusé", 403
-
+        return redirect("/pricing")
     return render_template_string(APP, offres=get_offres())
+
+@app.route("/webhook", methods=["POST"])
+def webhook():
+    event = stripe.Webhook.construct_event(
+        request.data,
+        request.headers.get("Stripe-Signature"),
+        STRIPE_WEBHOOK_SECRET
+    )
+    if event["type"] == "checkout.session.completed":
+        email = event["data"]["object"]["customer_email"]
+        set_subscriber(email, "active")
+    return "ok", 200
 
 @app.route("/debug/db")
 def debug_db():
@@ -197,4 +221,3 @@ def debug_db():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
-
