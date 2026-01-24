@@ -175,22 +175,45 @@ HOME = HOME = """
 """
 
 
-PRICING = """
+PRICING = PRICING = """
 <!doctype html>
-<html><head><title>Abonnement</title>""" + BASE_STYLE + """</head>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Abonnement</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+""" + BASE_STYLE + """
+</head>
 <body>
+
 <div class="container">
-<div class="card" style="max-width:420px;margin:auto">
-<h2>Abonnement Premium</h2>
-<p>29 $ / mois</p>
-<form method="post" action="/create-checkout-session">
-<input name="email" placeholder="Email professionnel" required><br><br>
-<button class="btn btn-dark" style="width:100%">Continuer vers le paiement</button>
-</form>
+  <div class="card" style="max-width:480px;margin:auto;text-align:center">
+    <h2>Abonnement Premium</h2>
+    <p style="font-size:20px">29 $ / mois</p>
+    <p>
+      Accès illimité aux contrats d’entretien ménager.<br>
+      Mises à jour continues.
+    </p>
+
+    <form method="post" action="/create-checkout-session">
+      <input name="email" placeholder="Email professionnel" required>
+      <br><br>
+      <button class="btn btn-dark" style="width:100%">
+        Continuer vers le paiement
+      </button>
+    </form>
+
+    <br>
+    <a href="/app?email=hsavignet@gmail.com">
+      Déjà abonné ? Accéder aux contrats
+    </a>
+  </div>
 </div>
-</div>
-</body></html>
+
+</body>
+</html>
 """
+
 
 APP = """
 <!doctype html>
