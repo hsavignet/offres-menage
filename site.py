@@ -198,6 +198,13 @@ APP = """
 <body>
 <div class="container">
 <h2>Contrats disponibles</h2>
+
+<div style="margin:24px 0">
+  <a class="btn btn-dark" href="/refresh?email={{request.args.get('email')}}">
+    🔄 Rafraîchir les offres
+  </a>
+</div>
+
 {% for t,l,d in offres %}
 <div class="card" style="margin-bottom:20px">
 <strong>{{t}}</strong><br>
@@ -259,6 +266,20 @@ def debug_db():
     count = c.fetchone()[0]
     conn.close()
     return {"count": count}
+
+@app.route("/refresh")
+def refresh_offres():
+    email = request.args.get("email","").lower()
+    if not is_active(email):
+        return redirect("/pricing")
+
+    try:
+        from robot import main as run_robot
+        run_robot()
+    except Exception as e:
+        print("Erreur refresh robot:", e)
+
+    return redirect("/app?email=" + email)
 
 # =====================================================
 if __name__ == "__main__":
