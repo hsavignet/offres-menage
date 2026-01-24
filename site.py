@@ -296,19 +296,6 @@ def debug_db():
     conn.close()
     return {"count": count}
 
-@app.route("/refresh")
-def refresh_offres():
-    email = request.args.get("email","").lower()
-    if not is_active(email):
-        return redirect("/pricing")
-
-    try:
-        from robot import main as run_robot
-        run_robot()
-    except Exception as e:
-        print("Erreur refresh robot:", e)
-
-    return redirect("/app?email=" + email)
 
 @app.route("/refresh")
 def refresh():
