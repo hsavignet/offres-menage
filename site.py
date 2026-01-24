@@ -91,7 +91,7 @@ def is_active(email):
     return row and row[0] == "active"
 
 init_db()
-seed_if_empty()
+
 
 # =====================================================
 # LOGIQUE
@@ -307,6 +307,16 @@ def refresh():
     main()
 
     return redirect("/app?email=" + email)
+
+@app.route("/admin/clear")
+def clear_db():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("DELETE FROM offres")
+    conn.commit()
+    conn.close()
+    return "DB vidée"
+
 
 # =====================================================
 if __name__ == "__main__":
