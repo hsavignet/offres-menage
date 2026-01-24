@@ -222,6 +222,12 @@ APP = """
 <div class="container">
 <h2>Contrats disponibles</h2>
 
+<a class="btn btn-dark" href="/refresh?email={{request.args.get('email')}}">
+  🔄 Rafraîchir les offres
+</a>
+<br><br>
+
+
 <div style="margin:24px 0">
   <a class="btn btn-dark" href="/refresh?email={{request.args.get('email')}}">
     🔄 Rafraîchir les offres
@@ -301,6 +307,17 @@ def refresh_offres():
         run_robot()
     except Exception as e:
         print("Erreur refresh robot:", e)
+
+    return redirect("/app?email=" + email)
+
+@app.route("/refresh")
+def refresh():
+    email = request.args.get("email","")
+    if not is_active(email):
+        return redirect("/pricing")
+
+    from robot import main
+    main()
 
     return redirect("/app?email=" + email)
 
