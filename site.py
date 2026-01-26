@@ -4,29 +4,30 @@ from datetime import datetime
 from flask import Flask, request, redirect, render_template_string
 import stripe
 
-# =====================================================
+# =========================
 # CONFIG
-# =====================================================
+# =========================
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE_DIR, "offres.db")
 
+ADMIN_EMAIL = "hsavignet@gmail.com"
+
 stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
 
-ADMIN_EMAIL = "hsavignet@gmail.com"
-
-# =====================================================
+# =========================
 # DATABASE
-# =====================================================
+# =========================
 def get_db():
     return sqlite3.connect(DB)
 
 def init_db():
     conn = get_db()
     c = conn.cursor()
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS offres (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,6 +36,7 @@ def init_db():
             date_pub TEXT
         )
     """)
+
     c.execute("""
         CREATE TABLE IF NOT EXISTS subscribers (
             email TEXT PRIMARY KEY,
@@ -42,20 +44,20 @@ def init_db():
             updated_at TEXT
         )
     """)
+
     conn.commit()
     conn.close()
 
 init_db()
 
-# =====================================================
+# =========================
 # LOGIQUE ACCÈS
-# =====================================================
-def is_active(email):
-    if not email:
-        return False
+# =========================
+def is_admin(email):
+    return email.lower() == ADMIN_EMAIL
 
-    # 🔓 ACCÈS GRATUIT POUR TOI
-    if email.lower() == ADMIN_EMAIL:
+def is_active(email):
+    if is_admin(email):
         return True
 
     conn = get_db()
@@ -68,14 +70,18 @@ def is_active(email):
 def get_offres():
     conn = get_db()
     c = conn.cursor()
-    c.execute("SELECT titre, lien, date_pub FROM offres ORDER BY date_pub DESC")
+    c.execute("""
+        SELECT titre, lien, date_pub
+        FROM offres
+        ORDER BY date_pub DESC
+    """)
     rows = c.fetchall()
     conn.close()
     return rows
 
-# =====================================================
+# =========================
 # UI
-# =====================================================
+# =========================
 BASE_STYLE = """
 <style>
 body{margin:0;font-family:Arial;background:#f3f4f6;color:#111827}
@@ -106,7 +112,7 @@ HOME = """
 <header>
   <div class="container">
     <h1>Contrats d’entretien ménager</h1>
-    <p>Appels d’offres B2B pour entreprises de nettoyage</p><br>
+    <p>Veille B2B des appels d’offres pour entreprises de nettoyage</p><br>
 
     <a class="btn btn-dark" href="/pricing">S’abonner</a>
     <a class="btn btn-light" href="/app?email=hsavignet@gmail.com">
@@ -146,29 +152,32 @@ APP = """
 <div class="container">
 
 <h2>Contrats disponibles</h2>
+<p>Veille quotidienne des opportunités en entretien ménager.</p>
 
+{% if admin %}
 <a class="btn btn-dark" href="/refresh?email={{email}}">
   🔄 Rafraîchir les offres
 </a>
 <br><br>
+{% endif %}
 
 {% for t,l,d in offres %}
 <div class="card">
-<strong>{{t}}</strong><br>
-<small>{{d}}</small><br><br>
-<a class="btn btn-light" href="{{l}}" target="_blank">Voir</a>
+  <strong>{{t}}</strong><br>
+  <small>Publié le {{d[:10]}}</small><br><br>
+  <a class="btn btn-light" href="{{l}}" target="_blank">Voir l’appel d’offres</a>
 </div>
 {% else %}
-<p>Aucune offre pour le moment</p>
+<p>Aucune offre pour le moment.</p>
 {% endfor %}
 
 </div>
 </body></html>
 """
 
-# =====================================================
+# =========================
 # ROUTES
-# =====================================================
+# =========================
 @app.route("/")
 def home():
     return render_template_string(HOME)
@@ -194,13 +203,20 @@ def app_page():
     email = request.args.get("email","")
     if not is_active(email):
         return redirect("/pricing")
-    return render_template_string(APP, offres=get_offres(), email=email)
+
+    return render_template_string(
+        APP,
+        offres=get_offres(),
+        email=email,
+        admin=is_admin(email)
+    )
 
 @app.route("/refresh")
 def refresh():
     email = request.args.get("email","")
-    if not is_active(email):
+    if not is_admin(email):
         return redirect("/pricing")
+
     from robot import main
     main()
     return redirect("/app?email=" + email)
@@ -223,6 +239,6 @@ def webhook():
         conn.close()
     return "ok", 200
 
-# =====================================================
+# =========================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
