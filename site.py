@@ -29,13 +29,14 @@ def init_db():
     c = conn.cursor()
 
     c.execute("""
-        CREATE TABLE IF NOT EXISTS offres (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titre TEXT,
-            lien TEXT UNIQUE,
-            date_pub TEXT
-        )
-    """)
+    CREATE TABLE IF NOT EXISTS offres (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        titre TEXT,
+        lien TEXT UNIQUE,
+        source TEXT,
+        date_pub TEXT
+    )
+""")
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS subscribers (
@@ -71,13 +72,27 @@ def get_offres():
     conn = get_db()
     c = conn.cursor()
     c.execute("""
-        SELECT titre, lien, date_pub
-        FROM offres
-        ORDER BY date_pub DESC
+        SELECT titre, lien, source, date_pub
+FROM offres
+ORDER BY date_pub DESC
     """)
     rows = c.fetchall()
     conn.close()
     return rows
+
+def get_new_offres_today():
+    today = datetime.utcnow().date().isoformat()
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        SELECT COUNT(*)
+        FROM offres
+        WHERE date_pub LIKE ?
+    """, (today + "%",))
+    count = c.fetchone()[0]
+    conn.close()
+    return count
+
 
 # =========================
 # UI
@@ -152,7 +167,10 @@ APP = """
 <div class="container">
 
 <h2>Contrats disponibles</h2>
-<p>Veille quotidienne des opportunités en entretien ménager.</p>
+<p>
+Veille quotidienne des appels d’offres en entretien ménager.
+<strong>{{new_count}} nouvelles offres aujourd’hui.</strong>
+</p>
 
 {% if admin %}
 <a class="btn btn-dark" href="/refresh?email={{email}}">
@@ -161,11 +179,18 @@ APP = """
 <br><br>
 {% endif %}
 
-{% for t,l,d in offres %}
+{% for t,l,s,d in offres %}
 <div class="card">
   <strong>{{t}}</strong><br>
-  <small>Publié le {{d[:10]}}</small><br><br>
-  <a class="btn btn-light" href="{{l}}" target="_blank">Voir l’appel d’offres</a>
+  <small>
+    Source :
+    <strong style="color:#059669">{{s}}</strong> —
+    publié le {{d[:10]}}
+  </small>
+  <br><br>
+  <a class="btn btn-light" href="{{l}}" target="_blank">
+    Voir l’appel d’offres
+  </a>
 </div>
 {% else %}
 <p>Aucune offre pour le moment.</p>
@@ -174,6 +199,7 @@ APP = """
 </div>
 </body></html>
 """
+
 
 # =========================
 # ROUTES
@@ -205,11 +231,12 @@ def app_page():
         return redirect("/pricing")
 
     return render_template_string(
-        APP,
-        offres=get_offres(),
-        email=email,
-        admin=is_admin(email)
-    )
+    APP,
+    offres=get_offres(),
+    email=email,
+    admin=is_admin(email),
+    new_count=get_new_offres_today()
+)
 
 @app.route("/refresh")
 def refresh():
