@@ -7,44 +7,25 @@ from bs4 import BeautifulSoup
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE_DIR, "offres.db")
 
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
 KEYWORDS = [
-    "entretien", "ménage", "menage", "nettoyage",
-    "conciergerie", "maintenance", "bâtiment", "batiment",
-    "hygiène", "hygiene", "sanitation"
+    "entretien",
+    "nettoyage",
+    "ménager",
+    "menager",
+    "conciergerie",
+    "sanitation",
+    "maintenance"
 ]
 
-# =====================================================
-# SOURCES MUNICIPALES (VOLUME)
-# =====================================================
-MUNICIPAL_SOURCES = [
-    ("Municipal", "https://www.montreal.ca/appels-offres"),
-    ("Municipal", "https://www.ville.quebec.qc.ca/apropos/affaires/appels_offres.aspx"),
-    ("Municipal", "https://www.laval.ca/Pages/Fr/Citoyens/appels-offres.aspx"),
-    ("Municipal", "https://www.longueuil.quebec/fr/appels-doffres"),
-    ("Municipal", "https://www.gatineau.ca/portail/default.aspx?p=guichet_municipal/appels_offres"),
-    ("Municipal", "https://www.sherbrooke.ca/fr/ville-et-administration/appels-doffres"),
-    ("Municipal", "https://www.trois-rivieres.ca/appels-offres"),
-    ("Municipal", "https://www.levis.ca/ville-de-levis/appels-offres.aspx"),
-    ("Municipal", "https://www.saguenay.ca/ville-et-services/appels-doffres"),
-]
-
-# =====================================================
-# SEAO (GROS VOLUME OFFICIEL)
-# =====================================================
-CKAN_URL = "https://www.donneesquebec.ca/recherche/api/3/action/package_show"
-DATASET_ID = "d23b2e02-085d-43e5-9e6e-e1d558ebfdd5"
+SEARCH_URL = "https://www.seao.ca/Recherche/recherche.aspx"
 
 
-def init_db(c):
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS offres (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titre TEXT,
-            lien TEXT UNIQUE,
-            source TEXT,
-            date_pub TEXT
-        )
-    """)
+def get_db():
+    return sqlite3.connect(DB)
 
 
 def matches_keywords(text):
@@ -52,28 +33,36 @@ def matches_keywords(text):
     return any(k in t for k in KEYWORDS)
 
 
-# =====================================================
-# MUNICIPAL SCRAPER
-# =====================================================
-def fetch_municipal(c):
-    headers = {"User-Agent": "Mozilla/5.0"}
+def fetch_seao():
+    conn = get_db()
+    c = conn.cursor()
 
-    for source_name, url in MUNICIPAL_SOURCES:
+    for page in range(1, 6):  # pages 1 à 5
+        params = {
+            "keyword": "entretien",
+            "type": "Services",
+            "page": page
+        }
+
         try:
-            r = requests.get(url, headers=headers, timeout=20)
+            r = requests.get(SEARCH_URL, headers=HEADERS, params=params, timeout=30)
             soup = BeautifulSoup(r.text, "html.parser")
 
-            for a in soup.find_all("a"):
-                titre = a.get_text(strip=True)
-                lien = a.get("href")
+            results = soup.select(".result-item")
 
-                if not titre or not lien:
+            for item in results:
+                title_el = item.select_one("a")
+                date_el = item.select_one(".date")
+
+                if not title_el:
                     continue
+
+                titre = title_el.get_text(strip=True)
+                lien = "https://www.seao.ca" + title_el.get("href", "")
+                date_pub = date_el.get_text(strip=True) if date_el else ""
+
                 if not matches_keywords(titre):
                     continue
-
-                if lien.startswith("/"):
-                    lien = url.split("/")[0] + "//" + url.split("/")[2] + lien
 
                 c.execute("""
                     INSERT OR IGNORE INTO offres (titre, lien, source, date_pub)
@@ -81,65 +70,20 @@ def fetch_municipal(c):
                 """, (
                     titre,
                     lien,
-                    source_name,
-                    datetime.utcnow().isoformat()
+                    "SEAO",
+                    date_pub or datetime.utcnow().isoformat()
                 ))
+
         except Exception as e:
-            print("Municipal error:", url, e)
-
-
-# =====================================================
-# SEAO (JSON OFFICIEL)
-# =====================================================
-def fetch_seao(c):
-    try:
-        r = requests.get(CKAN_URL, params={"id": DATASET_ID}, timeout=30)
-        data = r.json()
-        resources = data["result"]["resources"]
-        jsons = [r for r in resources if r.get("format","").lower() == "json"]
-        jsons.sort(key=lambda r: r.get("last_modified",""), reverse=True)
-
-        url = jsons[0]["url"]
-        data = requests.get(url, timeout=60).json()
-
-        releases = data.get("releases", [])
-        for rel in releases:
-            tender = rel.get("tender", {})
-            titre = tender.get("title", "")
-            desc = tender.get("description", "")
-            lien = tender.get("url") or rel.get("links", {}).get("html")
-
-            if not titre or not lien:
-                continue
-            if not matches_keywords(titre + " " + desc):
-                continue
-
-            c.execute("""
-                INSERT OR IGNORE INTO offres (titre, lien, source, date_pub)
-                VALUES (?, ?, ?, ?)
-            """, (
-                titre,
-                lien,
-                "SEAO",
-                datetime.utcnow().isoformat()
-            ))
-    except Exception as e:
-        print("SEAO error:", e)
-
-
-# =====================================================
-def main():
-    conn = sqlite3.connect(DB)
-    c = conn.cursor()
-
-    init_db(c)
-
-    fetch_municipal(c)
-    fetch_seao(c)
+            print("SEAO error page", page, e)
 
     conn.commit()
     conn.close()
-    print("✅ Rafraîchissement terminé (municipal + SEAO)")
+    print("✅ SEAO refresh terminé")
+
+
+def main():
+    fetch_seao()
 
 
 if __name__ == "__main__":
