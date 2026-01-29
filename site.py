@@ -4,9 +4,9 @@ from datetime import datetime
 from flask import Flask, request, redirect, render_template_string
 import stripe
 
-# =========================
+# =====================================================
 # CONFIG
-# =========================
+# =====================================================
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -18,9 +18,9 @@ stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
 STRIPE_PRICE_ID = os.environ.get("STRIPE_PRICE_ID")
 STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
 
-# =========================
+# =====================================================
 # DATABASE
-# =========================
+# =====================================================
 def get_db():
     return sqlite3.connect(DB)
 
@@ -29,14 +29,14 @@ def init_db():
     c = conn.cursor()
 
     c.execute("""
-    CREATE TABLE IF NOT EXISTS offres (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        titre TEXT,
-        lien TEXT UNIQUE,
-        source TEXT,
-        date_pub TEXT
-    )
-""")
+        CREATE TABLE IF NOT EXISTS offres (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            titre TEXT,
+            lien TEXT UNIQUE,
+            source TEXT,
+            date_pub TEXT
+        )
+    """)
 
     c.execute("""
         CREATE TABLE IF NOT EXISTS subscribers (
@@ -46,14 +46,57 @@ def init_db():
         )
     """)
 
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS meta (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        )
+    """)
+
     conn.commit()
     conn.close()
 
 init_db()
 
-# =========================
+# =====================================================
+# AUTO REFRESH (1x / jour max)
+# =====================================================
+def get_last_refresh():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT value FROM meta WHERE key='last_refresh'")
+    row = c.fetchone()
+    conn.close()
+    return row[0] if row else None
+
+def set_last_refresh():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("""
+        INSERT OR REPLACE INTO meta (key, value)
+        VALUES ('last_refresh', ?)
+    """, (datetime.utcnow().isoformat(),))
+    conn.commit()
+    conn.close()
+
+def auto_refresh_if_needed():
+    last = get_last_refresh()
+    now = datetime.utcnow()
+
+    if not last or (now - datetime.fromisoformat(last)).days >= 1:
+        try:
+            from robot import main
+            main()
+            set_last_refresh()
+            print("🔄 Auto refresh exécuté")
+        except Exception as e:
+            print("Auto refresh error:", e)
+
+auto_refresh_if_needed()
+
+# =====================================================
 # LOGIQUE ACCÈS
-# =========================
+# =====================================================
 def is_admin(email):
     return email.lower() == ADMIN_EMAIL
 
@@ -73,8 +116,8 @@ def get_offres():
     c = conn.cursor()
     c.execute("""
         SELECT titre, lien, source, date_pub
-FROM offres
-ORDER BY date_pub DESC
+        FROM offres
+        ORDER BY date_pub DESC
     """)
     rows = c.fetchall()
     conn.close()
@@ -93,10 +136,9 @@ def get_new_offres_today():
     conn.close()
     return count
 
-
-# =========================
+# =====================================================
 # UI
-# =========================
+# =====================================================
 BASE_STYLE = """
 <style>
 body{margin:0;font-family:Arial;background:#f3f4f6;color:#111827}
@@ -123,19 +165,17 @@ HOME = """
 """ + BASE_STYLE + """
 </head>
 <body>
-
 <header>
   <div class="container">
     <h1>Contrats d’entretien ménager</h1>
-    <p>Veille B2B des appels d’offres pour entreprises de nettoyage</p><br>
-
+    <p>
+      Toutes les opportunités de contrats de nettoyage au Québec,
+      regroupées automatiquement.
+    </p><br>
     <a class="btn btn-dark" href="/pricing">S’abonner</a>
-    <a class="btn btn-light" href="/app?email=hsavignet@gmail.com">
-      Déjà abonné
-    </a>
+    <a class="btn btn-light" href="/app?email=hsavignet@gmail.com">Déjà abonné</a>
   </div>
 </header>
-
 </body></html>
 """
 
@@ -148,7 +188,7 @@ PRICING = """
 <div class="container">
 <div class="card" style="max-width:420px;margin:auto;text-align:center">
 <h2>Abonnement Premium</h2>
-<p>29 $ / mois</p>
+<p>39 $ / mois</p>
 <form method="post" action="/create-checkout-session">
 <input name="email" placeholder="Email professionnel" required><br><br>
 <button class="btn btn-dark" style="width:100%">Continuer</button>
@@ -168,29 +208,19 @@ APP = """
 
 <h2>Contrats disponibles</h2>
 <p>
-Veille quotidienne des appels d’offres en entretien ménager.
-<strong>{{new_count}} nouvelles offres aujourd’hui.</strong>
+<strong>{{new_count}}</strong> nouvelles opportunités ajoutées aujourd’hui.
 </p>
 
 {% if admin %}
-<a class="btn btn-dark" href="/refresh?email={{email}}">
-  🔄 Rafraîchir les offres
-</a>
+<a class="btn btn-dark" href="/refresh?email={{email}}">🔄 Rafraîchir</a>
 <br><br>
 {% endif %}
 
 {% for t,l,s,d in offres %}
 <div class="card">
-  <strong>{{t}}</strong><br>
-  <small>
-    Source :
-    <strong style="color:#059669">{{s}}</strong> —
-    publié le {{d[:10]}}
-  </small>
-  <br><br>
-  <a class="btn btn-light" href="{{l}}" target="_blank">
-    Voir l’appel d’offres
-  </a>
+<strong>{{t}}</strong><br>
+<small>Source : <strong>{{s}}</strong> — {{d[:10]}}</small><br><br>
+<a class="btn btn-light" href="{{l}}" target="_blank">Voir l’appel d’offres</a>
 </div>
 {% else %}
 <p>Aucune offre pour le moment.</p>
@@ -200,10 +230,9 @@ Veille quotidienne des appels d’offres en entretien ménager.
 </body></html>
 """
 
-
-# =========================
+# =====================================================
 # ROUTES
-# =========================
+# =====================================================
 @app.route("/")
 def home():
     return render_template_string(HOME)
@@ -231,12 +260,12 @@ def app_page():
         return redirect("/pricing")
 
     return render_template_string(
-    APP,
-    offres=get_offres(),
-    email=email,
-    admin=is_admin(email),
-    new_count=get_new_offres_today()
-)
+        APP,
+        offres=get_offres(),
+        email=email,
+        admin=is_admin(email),
+        new_count=get_new_offres_today()
+    )
 
 @app.route("/refresh")
 def refresh():
@@ -246,6 +275,7 @@ def refresh():
 
     from robot import main
     main()
+    set_last_refresh()
     return redirect("/app?email=" + email)
 
 @app.route("/webhook", methods=["POST"])
@@ -266,6 +296,6 @@ def webhook():
         conn.close()
     return "ok", 200
 
-# =========================
+# =====================================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
