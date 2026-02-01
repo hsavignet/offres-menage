@@ -79,20 +79,6 @@ def set_last_refresh():
     conn.commit()
     conn.close()
 
-def auto_refresh_if_needed():
-    last = get_last_refresh()
-    now = datetime.utcnow()
-
-    if not last or (now - datetime.fromisoformat(last)).days >= 1:
-        try:
-            from robot import main
-            main()
-            set_last_refresh()
-            print("🔄 Auto refresh exécuté")
-        except Exception as e:
-            print("Auto refresh error:", e)
-
-auto_refresh_if_needed()
 
 # =====================================================
 # LOGIQUE ACCÈS
@@ -298,4 +284,5 @@ def webhook():
 
 # =====================================================
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)))
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
+
