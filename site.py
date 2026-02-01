@@ -46,42 +46,38 @@ def init_db():
         )
     """)
 
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS meta (
-            key TEXT PRIMARY KEY,
-            value TEXT
-        )
-    """)
+    conn.commit()
+    conn.close()
+
+def seed_if_empty():
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT COUNT(*) FROM offres")
+    count = c.fetchone()[0]
+
+    if count == 0:
+        now = datetime.utcnow().isoformat()
+        demo = [
+            ("Entretien ménager – École primaire", "https://www.seao.ca", "SEAO", now),
+            ("Nettoyage centre sportif municipal", "https://www.seao.ca", "SEAO", now),
+            ("Contrat de conciergerie – Hôpital", "https://www.seao.ca", "SEAO", now),
+            ("Entretien immeuble administratif", "https://www.seao.ca", "SEAO", now),
+            ("Services de nettoyage – Université", "https://www.seao.ca", "SEAO", now),
+        ]
+
+        c.executemany("""
+            INSERT OR IGNORE INTO offres (titre, lien, source, date_pub)
+            VALUES (?, ?, ?, ?)
+        """, demo)
 
     conn.commit()
     conn.close()
 
 init_db()
+seed_if_empty()
 
 # =====================================================
-# AUTO REFRESH (1x / jour max)
-# =====================================================
-def get_last_refresh():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT value FROM meta WHERE key='last_refresh'")
-    row = c.fetchone()
-    conn.close()
-    return row[0] if row else None
-
-def set_last_refresh():
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("""
-        INSERT OR REPLACE INTO meta (key, value)
-        VALUES ('last_refresh', ?)
-    """, (datetime.utcnow().isoformat(),))
-    conn.commit()
-    conn.close()
-
-
-# =====================================================
-# LOGIQUE ACCÈS
+# LOGIQUE
 # =====================================================
 def is_admin(email):
     return email.lower() == ADMIN_EMAIL
@@ -97,30 +93,31 @@ def is_active(email):
     conn.close()
     return row and row[0] == "active"
 
-def get_offres():
+def get_offres(q=None, source=None):
     conn = get_db()
     c = conn.cursor()
-    c.execute("""
+
+    sql = """
         SELECT titre, lien, source, date_pub
         FROM offres
-        ORDER BY date_pub DESC
-    """)
+        WHERE 1=1
+    """
+    params = []
+
+    if q:
+        sql += " AND lower(titre) LIKE ?"
+        params.append(f"%{q.lower()}%")
+
+    if source:
+        sql += " AND source = ?"
+        params.append(source)
+
+    sql += " ORDER BY date_pub DESC"
+
+    c.execute(sql, params)
     rows = c.fetchall()
     conn.close()
     return rows
-
-def get_new_offres_today():
-    today = datetime.utcnow().date().isoformat()
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("""
-        SELECT COUNT(*)
-        FROM offres
-        WHERE date_pub LIKE ?
-    """, (today + "%",))
-    count = c.fetchone()[0]
-    conn.close()
-    return count
 
 # =====================================================
 # UI
@@ -129,12 +126,13 @@ BASE_STYLE = """
 <style>
 body{margin:0;font-family:Arial;background:#f3f4f6;color:#111827}
 a{text-decoration:none}
-.container{max-width:1200px;margin:auto;padding:80px 24px}
-.btn{padding:14px 28px;border-radius:10px;font-weight:700;display:inline-block}
+.container{max-width:1100px;margin:auto;padding:80px 24px}
+.btn{padding:12px 24px;border-radius:8px;font-weight:700;display:inline-block}
 .btn-dark{background:#111827;color:white}
 .btn-light{background:white;color:#111827;border:1px solid #e5e7eb}
-.card{background:white;border-radius:16px;padding:32px;margin-bottom:20px;
-box-shadow:0 20px 40px rgba(0,0,0,.08)}
+.card{background:white;border-radius:14px;padding:28px;margin-bottom:20px;
+box-shadow:0 12px 30px rgba(0,0,0,.08)}
+input,select{padding:12px;border-radius:8px;border:1px solid #d1d5db}
 header{
 background:
 linear-gradient(rgba(17,24,39,.75),rgba(17,24,39,.75)),
@@ -155,13 +153,31 @@ HOME = """
   <div class="container">
     <h1>Contrats d’entretien ménager</h1>
     <p>
-      Toutes les opportunités de contrats de nettoyage au Québec,
-      regroupées automatiquement.
+      Tous les appels d’offres en nettoyage au Québec,
+      regroupés automatiquement.
     </p><br>
     <a class="btn btn-dark" href="/pricing">S’abonner</a>
-    <a class="btn btn-light" href="/app?email=hsavignet@gmail.com">Déjà abonné</a>
+    <a class="btn btn-light" href="/login">Déjà abonné</a>
   </div>
 </header>
+</body></html>
+"""
+
+LOGIN = """
+<!doctype html>
+<html><head><title>Accès abonné</title>
+""" + BASE_STYLE + """
+</head>
+<body>
+<div class="container">
+<div class="card" style="max-width:420px;margin:auto">
+<h2>Accès abonné</h2>
+<form method="get" action="/app">
+<input name="email" placeholder="Email d’abonnement" required style="width:100%"><br><br>
+<button class="btn btn-dark" style="width:100%">Accéder</button>
+</form>
+</div>
+</div>
 </body></html>
 """
 
@@ -193,12 +209,19 @@ APP = """
 <div class="container">
 
 <h2>Contrats disponibles</h2>
-<p>
-<strong>{{new_count}}</strong> nouvelles opportunités ajoutées aujourd’hui.
-</p>
+
+<form method="get" style="margin-bottom:30px">
+<input type="hidden" name="email" value="{{email}}">
+<input name="q" value="{{q}}" placeholder="Recherche (école, hôpital…)" style="width:50%">
+<select name="source">
+<option value="">Toutes les sources</option>
+<option value="SEAO" {% if source=="SEAO" %}selected{% endif %}>SEAO</option>
+</select>
+<button class="btn btn-dark">Rechercher</button>
+</form>
 
 {% if admin %}
-<a class="btn btn-dark" href="/refresh?email={{email}}">🔄 Rafraîchir</a>
+<a class="btn btn-dark" href="/refresh?email={{email}}">🔄 Rafraîchir les offres</a>
 <br><br>
 {% endif %}
 
@@ -209,7 +232,7 @@ APP = """
 <a class="btn btn-light" href="{{l}}" target="_blank">Voir l’appel d’offres</a>
 </div>
 {% else %}
-<p>Aucune offre pour le moment.</p>
+<p>Aucune offre trouvée.</p>
 {% endfor %}
 
 </div>
@@ -222,6 +245,10 @@ APP = """
 @app.route("/")
 def home():
     return render_template_string(HOME)
+
+@app.route("/login")
+def login():
+    return render_template_string(LOGIN)
 
 @app.route("/pricing")
 def pricing():
@@ -245,12 +272,16 @@ def app_page():
     if not is_active(email):
         return redirect("/pricing")
 
+    q = request.args.get("q","")
+    source = request.args.get("source","")
+
     return render_template_string(
         APP,
-        offres=get_offres(),
+        offres=get_offres(q, source),
         email=email,
         admin=is_admin(email),
-        new_count=get_new_offres_today()
+        q=q,
+        source=source
     )
 
 @app.route("/refresh")
@@ -261,7 +292,6 @@ def refresh():
 
     from robot import main
     main()
-    set_last_refresh()
     return redirect("/app?email=" + email)
 
 @app.route("/webhook", methods=["POST"])
@@ -285,4 +315,3 @@ def webhook():
 # =====================================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 10000)))
-
