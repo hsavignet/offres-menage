@@ -83,15 +83,8 @@ def is_admin(email):
     return email.lower() == ADMIN_EMAIL
 
 def is_active(email):
-    if is_admin(email):
-        return True
+    return True
 
-    conn = get_db()
-    c = conn.cursor()
-    c.execute("SELECT status FROM subscribers WHERE email=?", (email.lower(),))
-    row = c.fetchone()
-    conn.close()
-    return row and row[0] == "active"
 
 def get_offres(q=None, source=None):
     conn = get_db()
