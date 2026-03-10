@@ -1,8 +1,8 @@
 import os
 import sqlite3
-from datetime import datetime
 import requests
 from bs4 import BeautifulSoup
+from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB = os.path.join(BASE_DIR, "offres.db")
@@ -17,11 +17,8 @@ KEYWORDS = [
     "ménager",
     "menager",
     "conciergerie",
-    "sanitation",
-    "maintenance"
+    "sanitation"
 ]
-
-SEARCH_URL = "https://www.seao.ca/Recherche/recherche.aspx"
 
 
 def get_db():
@@ -33,57 +30,58 @@ def matches_keywords(text):
     return any(k in t for k in KEYWORDS)
 
 
-def fetch_seao():
+def fetch_indeed():
+
     conn = get_db()
     c = conn.cursor()
 
-    for page in range(1, 6):  # pages 1 à 5
-        params = {
-            "keyword": "entretien",
-            "type": "Services",
-            "page": page
-        }
+    url = "https://ca.indeed.com/jobs?q=entretien+menager&l=Quebec"
+
+    r = requests.get(url, headers=HEADERS)
+
+    soup = BeautifulSoup(r.text, "html.parser")
+
+    jobs = soup.select("a.tapItem")
+
+    for j in jobs:
+
+        title = j.get_text(strip=True)
+
+        if not matches_keywords(title):
+            continue
+
+        link = j.get("href")
+
+        if not link:
+            continue
+
+        link = "https://ca.indeed.com" + link
 
         try:
-            r = requests.get(SEARCH_URL, headers=HEADERS, params=params, timeout=30)
-            soup = BeautifulSoup(r.text, "html.parser")
 
-            results = soup.select(".result-item")
+            c.execute("""
+            INSERT OR IGNORE INTO offres
+            (titre,lien,source,date_pub)
+            VALUES (?,?,?,?)
+            """, (
+                title,
+                link,
+                "Indeed",
+                datetime.utcnow().isoformat()
+            ))
 
-            for item in results:
-                title_el = item.select_one("a")
-                date_el = item.select_one(".date")
-
-                if not title_el:
-                    continue
-
-                titre = title_el.get_text(strip=True)
-                lien = "https://www.seao.ca" + title_el.get("href", "")
-                date_pub = date_el.get_text(strip=True) if date_el else ""
-
-                if not matches_keywords(titre):
-                    continue
-
-                c.execute("""
-                    INSERT OR IGNORE INTO offres (titre, lien, source, date_pub)
-                    VALUES (?, ?, ?, ?)
-                """, (
-                    titre,
-                    lien,
-                    "SEAO",
-                    date_pub or datetime.utcnow().isoformat()
-                ))
-
-        except Exception as e:
-            print("SEAO error page", page, e)
+        except:
+            pass
 
     conn.commit()
     conn.close()
-    print("✅ SEAO refresh terminé")
+
+    print("Indeed terminé")
 
 
 def main():
-    fetch_seao()
+
+    fetch_indeed()
 
 
 if __name__ == "__main__":
